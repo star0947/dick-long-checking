@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no">
+<title>78长度查询器</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          primary: '#4A89DC',
+          'primary-light': '#eff8ff',
+          'primary-lighter': '#e6eeff',
+          'result-bg': '#F5F9FF',
+          'evaluation-bg': '#eff6ff'
+        },
+        fontFamily: {
+          'inter': ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+        }
+      }
+    }
+  }
+</script>
+<style>
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+  }
+</style>
+</head>
+<body class="font-inter overflow-hidden touch-none bg-gradient-to-br from-primary-light to-primary-lighter min-h-screen flex items-center justify-center p-4 text-gray-700 -webkit-text-size-adjust-100 -moz-text-size-adjust-100 text-size-adjust-100">
+<div class="w-full max-w-sm bg-white rounded-2xl p-6 shadow-lg transition-all duration-500 ease-in-out hover:shadow-xl">
+  <div class="text-center mb-8">
+    <h1 class="text-primary text-3xl md:text-4xl font-bold mb-2">78长度查询器</h1>
+    <p class="text-gray-500 text-lg mt-4">看看你的78长度</p>
+  </div>
+  <div class="mb-8">
+    <label for="username" class="block text-gray-600 mb-2">用户名：</label>
+    <input type="text" id="username" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-700 outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400" placeholder="请输入用户名">
+    <button id="analyzeBtn" class="w-full mt-5 bg-primary text-white font-medium py-4 px-6 rounded-xl border-none cursor-pointer flex items-center justify-center transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 text-base"><span>开始查询</span></button>
+  </div>
+  <div id="resultSection" class="bg-result-bg rounded-2xl p-6 hidden opacity-0 scale-95 transition-all duration-500">
+    <h2 class="text-xl font-semibold text-gray-600 mb-4">分析结果</h2>
+    <div class="text-gray-500 mb-1"><p>用户名: <span id="resultUsername" class="font-medium">***</span></p></div>
+    <div class="text-center mb-8"><div id="lengthResult" class="text-primary text-5xl md:text-6xl font-bold">0cm</div></div>
+    <div class="mb-6">
+      <div class="h-3 bg-gray-200 rounded-full overflow-hidden"><div id="progressBar" class="h-full bg-primary rounded-full w-0 transition-width duration-1000 ease-in-out"></div></div>
+      <div class="flex justify-between text-gray-500 text-xs mt-2"><span>0-5</span><span>6-10</span><span>11-13</span><span>14-16</span><span>17-20</span><span>21-25</span></div>
+    </div>
+    <div class="text-center px-4 py-2 bg-evaluation-bg rounded-lg text-gray-600"><p id="evaluation">分析...</p></div>
+  </div>
+</div>
+<script>
+// 点击音效（如果static/1.mp3文件不存在，静默失败）
+const clickSound=new Audio('static/1.mp3');
+// 获取所有需要的DOM元素引用
+const [
+  analyzeBtn,       // 分析按钮
+  usernameInput,    // 用户名输入框
+  resultSection,    // 结果展示区域
+  resultUsername,   // 结果显示的用户名元素
+  lengthResult,     // 长度结果显示元素
+  progressBar,      // 进度条元素
+  evaluation        // 评价文本元素
+]=['analyzeBtn','username','resultSection','resultUsername','lengthResult','progressBar','evaluation'].map(id=>document.getElementById(id));
+
+/**
+ * 基于用户名的哈希函数，生成确定性长度
+ * 使用djb2哈希算法，确保相同用户名总是得到相同结果
+ * @param {string} username - 输入的用户名
+ * @returns {number} 计算出的长度值（单位：cm）
+ */
+function getHashLength(username){
+  // 初始化哈希值
+  let hash = 0;
+  
+  // 遍历用户名每个字符，计算哈希值
+  for (let i = 0; i < username.length; i++) {
+    // djb2哈希算法：hash * 33 + charCode
+    hash = ((hash << 5) - hash) + username.charCodeAt(i);
+    // 确保哈希值为32位整数
+    hash = hash & hash;
+  }
+  
+  // 将哈希值归一化到0-100的范围
+  const normalizedHash = Math.abs(hash) % 101;
+  
+  // 根据归一化哈希值返回不同的长度范围
+  // 分布设计：15%用户得到0-5cm，15%得到6-10cm，以此类推
+  if (normalizedHash < 15) return Math.floor(normalizedHash / 15 * 6);        // 0-5cm (15%概率)
+  if (normalizedHash < 30) return 6 + Math.floor((normalizedHash - 15) / 15 * 5);   // 6-10cm (15%概率)
+  if (normalizedHash < 45) return 11 + Math.floor((normalizedHash - 30) / 15 * 3);  // 11-13cm (15%概率)
+  if (normalizedHash < 60) return 14 + Math.floor((normalizedHash - 45) / 15 * 3);   // 14-16cm (15%概率)
+  if (normalizedHash < 80) return 17 + Math.floor((normalizedHash - 60) / 20 * 4);   // 17-20cm (20%概率)
+  if (normalizedHash < 95) return 21 + Math.floor((normalizedHash - 80) / 15 * 5);   // 21-25cm (15%概率)
+  return 100 + Math.floor((normalizedHash - 95) / 6 * 900);                         // 100-1000+cm (5%概率，彩蛋)
+}
+
+/**
+ * 分析按钮点击事件处理
+ * 处理用户输入、执行分析、显示结果
+ */
+analyzeBtn.addEventListener('click',()=>{
+  // 播放点击音效（静默处理错误）
+  clickSound.play().catch(e=>{});
+  
+  // 获取并清理用户名输入
+  const username=usernameInput.value.trim();
+  
+  // 验证输入不为空
+  if(!username)return alert('信息不能为空');
+  
+  // 分析中禁用UI元素，防止重复点击
+  usernameInput.disabled=true;
+  analyzeBtn.disabled=true;
+  analyzeBtn.classList.add('bg-gray-300', 'cursor-not-allowed');
+  analyzeBtn.innerHTML='<div class="spinner"></div><span>分析中...</span>';
+  
+  // 2秒后显示分析结果（模拟分析过程）
+  setTimeout(()=>{
+    // 显示结果区域（淡入动画）
+    resultSection.classList.remove('hidden', 'opacity-0', 'scale-95');
+    resultSection.classList.add('block', 'opacity-100', 'scale-100');
+    
+    // 显示用户名
+    resultUsername.textContent=username;
+    
+    // 计算基于用户名的确定性长度
+    const len=getHashLength(username);
+    
+    // 更新进度条（如果长度超过100cm，进度条显示100%）
+    progressBar.style.width=`${len>=100?100:len/25*100}%`;
+    
+    // 评价文本配置（每个等级3个随机评价）
+    const evals={
+      s:['略短：别灰心，还有成长空间','略短：不必焦虑，尺寸并非一切','略短：保持自信，内在更重要'],      // 0-5cm
+      sh:['较短：还算正常范围','较短：多数人的水平，不必担心','较短：够用就好，无需过度比较'],         // 6-10cm
+      ml:['中等偏下：仍需努力','中等偏下：中间水平，还有提升空间','中等偏下：日常使用足够，不必苛求'],  // 11-13cm
+      m:['中规中矩：还行吧,不算丢人','中规中矩：标准水平，无需自卑','中规中矩：大多数人羡慕的程度'],     // 14-16cm
+      g:['良好：超过平均水平','良好：已经很出色了，值得肯定','良好：超越多数人，继续保持'],           // 17-20cm
+      e:['优秀：值得骄傲的长度','优秀：相当出色，令人羡慕','优秀：顶级水平，无需低调']                // 21cm+
+    };
+    
+    // 根据长度选择对应的评价等级和随机评价
+    let evalText;
+    if(len<=5)evalText=evals.s[Math.floor(Math.random()*3)];        // 0-5cm评价
+    else if(len<=10)evalText=evals.sh[Math.floor(Math.random()*3)];   // 6-10cm评价
+    else if(len<=13)evalText=evals.ml[Math.floor(Math.random()*3)];    // 11-13cm评价
+    else if(len<=16)evalText=evals.m[Math.floor(Math.random()*3)];     // 14-16cm评价
+    else if(len<=20)evalText=evals.g[Math.floor(Math.random()*3)];     // 17-20cm评价
+    else evalText=evals.e[Math.floor(Math.random()*3)];                // 21cm+评价
+    
+    // 显示评价文本
+    evaluation.textContent=evalText;
+    
+    // 数字动画：从0逐渐增加到最终长度
+    animateValue(lengthResult,0,len,1500);
+    
+    // 分析完成，重新启用UI元素
+    usernameInput.disabled=false;
+    analyzeBtn.disabled=false;
+    analyzeBtn.classList.remove('bg-gray-300', 'cursor-not-allowed');
+    analyzeBtn.innerHTML='<span>重新检测</span>';
+  },2000); // 2秒延迟，模拟分析过程
+});
+
+usernameInput.addEventListener('keypress',e=>e.key==='Enter'&&analyzeBtn.click());
+
+/**
+ * 数字动画函数
+ * 在指定时间内从起始值平滑过渡到结束值
+ * @param {HTMLElement} el - 要动画化的DOM元素
+ * @param {number} s - 起始值
+ * @param {number} e - 结束值
+ * @param {number} d - 动画持续时间（毫秒）
+ */
+function animateValue(el,s,e,d){
+  let startTime=null;
+  
+  // 动画步骤函数
+  const step=timestamp=>{
+    // 记录开始时间
+    startTime||(startTime=timestamp);
+    
+    // 计算动画进度（0到1之间）
+    const progress=Math.min((timestamp-startTime)/d,1);
+    
+    // 更新元素文本（线性插值）
+    el.textContent=`${Math.floor(progress*(e-s)+s)}cm`;
+    
+    // 如果动画未完成，继续下一帧
+    progress<1&&requestAnimationFrame(step);
+  };
+  
+  // 启动动画
+  requestAnimationFrame(step);
+}
+
+document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+document.addEventListener('wheel',e=>e.preventDefault(),{passive:false});
+// 合并到此处：时间戳hash功能（原有代码末尾添加）
+function addTimestampHash() {
+  const timestamp = Date.now();
+  window.location.hash = timestamp;
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", addTimestampHash);
+} else {
+  addTimestampHash();
+}
+</script>
+</body>
+</html>
